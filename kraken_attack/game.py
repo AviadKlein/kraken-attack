@@ -2,10 +2,25 @@ from __future__ import annotations
 
 from typing import Dict, Optional, List, Tuple
 from abc import ABC
-import random
+from random import Random
 
 class Pirate(ABC):
-    pass
+    
+    def __str__(self):
+        return self.__class__.__name__
+    
+    def __repr__(self):
+        return f"<Pirate: {self.__str__()}>"
+    
+    def __hash__(self):
+        return self.__str__().__hash__()
+    
+    def __eq__(self, value):
+        if isinstance(value, Pirate):
+            return self.__repr__() == value.__repr__()
+        else:
+            return False
+
 
 class Samuel(Pirate):
     pass
@@ -40,12 +55,12 @@ class GameBoard:
     ship holes are a tuple of ints and can be repeated, the ints need to be like the quadrants
     """
 
-    def __init__(self, pirate_quadrants: Dict[Pirate, int]):
+    def __init__(self, pirate_quadrants: Dict[Pirate, int], seed: int=42):
         assert len(pirate_quadrants) > 0, f"there needs to be at least 1 pirate"
         for p, q in pirate_quadrants.items():
             assert 0 <= q <= 3, f"the pirate {p} is in an illegal quadrant {q}"
         self.pirate_quadrants: Dict[Pirate, int] = pirate_quadrants
-        self.shield_status: Dict[int, bool] = {_:True for _ in range(8)}
+        self.shield_status: Dict[int, bool] = {_: True for _ in range(8)}
         self.arm_locations: Dict[int, int] = {
             0: 2,
             1: 1,
@@ -60,6 +75,25 @@ class GameBoard:
         self.kraken_lane: Optional[int] = None
         self.kraken_damage: int = 0
         self.ship_hole_positions: Tuple[int,...] = ()
+        self.rng = Random(seed)
+    
+    def __eq__(self, value):
+        if isinstance(value, GameBoard):
+            result = True
+            result &= self.pirate_quadrants == value.pirate_quadrants
+            result &= self.shield_status == value.shield_status
+            result &= self.arm_locations == value.arm_locations
+            result &= self.kraken_location == value.kraken_location
+            result &= self.kraken_lane == value.kraken_lane
+            result &= self.kraken_damage == value.kraken_damage
+            result &= self.ship_hole_positions == self.ship_hole_positions
+            result &= self.rng == value.rng
+            return result
+        else:
+            return False
+        
+    def __ne__(self, value):
+        return not self.__eq__(value)
 
     def draw_lane(self, lane: int) -> str:
         assert 0 <= lane <= 7
@@ -76,11 +110,11 @@ class GameBoard:
     
     def draw_ship_lane(self, lane: int) -> str:
         assert 0 <= lane <= 7
-        result = " |  "
+        result = "|__"
         if self.shield_status[lane]:
-            result = '🛡️' + result[1:]
+            result = '🛡️' + result
         else:
-            result = '.' + result[1:]
+            result = '.' + result
         if lane >= 4:
             result = result[::-1]
         return result
@@ -94,21 +128,25 @@ class GameBoard:
         return result
     
     def draw(self) -> str:
-        result = '      KRAKEN ATTACK\n'
+        result = '      KRAKEN ATTACK\n\n'
         result += self.draw_kraken_location()
-        result += '\n'
+        result += '\n\n'
         for left, right in [(0,4),(1,5),(2,6),(3,7)]:
             result += self.draw_lane(left)
-            result += self.draw_ship_lane(right)
             result += self.draw_ship_lane(left)
-            result += self.draw_lane(left)
+            result += self.draw_ship_lane(right)
+            result += self.draw_lane(right)
             result += '\n'
         result += '\n'
         result += f'Ship damage: {len(self.ship_hole_positions)}\n'
         result += f'Kraken damage: {self.kraken_damage}\n'
+        result += f'Pirates: {', '.join([str(_) for _ in self.pirates])}'
         return result
 
-    
+    @property
+    def pirates(self) -> List[Pirate]:
+        return list(self.pirate_quadrants.keys())
+
     @property
     def dice_counts(self):
         """Dice counts grow according to the location of the Kraken"""
@@ -149,7 +187,7 @@ class GameBoard:
         roll_outcome = []
         for color, num in self.dice_counts.items():
             for _ in range(num):
-                roll_outcome.append((color, random.randint(0,5)))
+                roll_outcome.append((color, self.rng.randint(0,5)))
         return roll_outcome
 
     def determine_kraken_moves(self, roll_outcome: List[Tuple[str, int]]) -> List[int]:
@@ -157,7 +195,7 @@ class GameBoard:
         returns a list of ints, each int points to a lane that 
         will perform an advance or an attack by the Kraken"""
         
-        assert set('red', 'blue') == {t[0] for t in roll_outcome}
+        assert set(('red', 'blue')) == {t[0] for t in roll_outcome}
         assert all(0 <= t[1] <= 5 for t in roll_outcome)
         moves = []
         for color, dice_roll in roll_outcome:
@@ -186,8 +224,7 @@ class GameBoard:
                 raise Exception(f"illegal lane, got {lane}")
 
     @property
-    @staticmethod
-    def legal_pirate_moves():
+    def legal_pirate_moves(self):
         return {
             0: (1,2),
             1: (0,3),
@@ -253,11 +290,8 @@ class GameBoard:
                 self.kraken_lane = lane
         else:
             self.kraken_location += 1
+
+    @property
+    def is_kraken_on_board(self) -> bool:
+        return (self.kraken_location == 9) and (self.kraken_lane is not None)
             
-
-    
-
-    
-
-
-    
